@@ -1,0 +1,158 @@
+class Wind 
+    Real WindSpeed; 
+    assertion 
+        WindSpeed := triangularDeviate(0,14,30); 
+end
+
+
+class Anemometer  
+    parameter Real workingprob = 99.5; /*Probability adjustment*/
+    Real fate;  
+    Boolean working;
+    assertion 
+        fate := uniformDeviate(0.0,100.0);  
+        working := if fate > workingprob  
+                   then false 
+                   else true;
+end  
+
+class Controller  
+    parameter Real workingprob = 99.5; /*Probability adjustment*/
+    Real fate;  
+    Boolean working;
+    assertion 
+        fate := uniformDeviate(0.0,100.0);  
+        working := if fate > workingprob  
+                   then false 
+                   else true;
+end 
+                                                                                                                                                                                                                                                                                                         
+class Windmill 
+    Anemometer A; 
+    Controller C;
+	parameter Real minWindSpeed = 3.5; 
+	parameter Real maxWindSpeed = 13;  
+	parameter Real shutdownWindSpeed = 25; 
+	Real WindSpeed, EnergyOutput;  
+	assertion 
+		EnergyOutput := if A.working == false or C.working == false or WindSpeed < minWindSpeed or WindSpeed >= shutdownWindSpeed
+		               then 0
+					   else if WindSpeed < maxWindSpeed 
+					   then 3.158 * WindSpeed - 11.054 
+					   else 30;
+					   					   
+end   
+
+class Cable  
+    Real in, out; 
+end
+
+class Circuit 
+    parameter Real successprob = 999;  /*Probability adjustment */
+    Real fate1, fate2, fate3, fate4, fate5; 
+	Windmill WM1;  
+    Windmill WM2; 
+    Windmill WM3;
+    Windmill WM4; 
+    Windmill WM5; 
+	Cable C1; 
+	Cable C2; 
+	Cable C3; 
+	Cable C4; 
+	Cable MC1;
+	assertion   
+    	fate1 := uniformDeviate(0.00, 1000); 
+    	fate2 := uniformDeviate(0.00, 1000); 
+    	fate3 := uniformDeviate(0.00, 1000); 
+    	fate4 := uniformDeviate(0.00, 1000); 
+    	fate5 := uniformDeviate(0.00, 1000);
+		WM1.WindSpeed:=main.W.WindSpeed; 
+        WM2.WindSpeed:=main.W.WindSpeed; 
+        WM3.WindSpeed:=main.W.WindSpeed; 
+        WM4.WindSpeed:=main.W.WindSpeed;
+        WM5.WindSpeed:=main.W.WindSpeed; 
+		C1.in:=WM1.EnergyOutput; 
+		C1.out := if fate1 > successprob
+            		then  0 
+            		else C1.in; 
+		C2.in:=C1.out + WM2.EnergyOutput; 
+		C2.out:= if fate2 > successprob
+            		then  0 
+            		else C2.in; 
+		C3.in:=C2.out + WM3.EnergyOutput; 
+		C3.out:=if fate3 > successprob
+            		then  0 
+            		else C3.in; 
+		C4.in:=C3.out + WM4.EnergyOutput; 
+		C4.out:=if fate4 > successprob
+            		then  0 
+            		else C4.in; 
+		MC1.in:=C4.out + WM5.EnergyOutput;  
+		MC1.out:=if fate5 > successprob
+            		then  0 
+            		else MC1.in; 
+end 
+
+class SwitchGear 
+	Real in1, in2, in3, in4, Output; 
+	assertion 
+		Output:=in1+in2+in3+in4; 
+end  
+
+class VoltageConverter 
+	Real in, ConvertedOutput; 
+end 
+
+block Farm 
+    Wind W; 
+    Circuit Circuit1; 
+	Circuit Circuit2; 
+	Circuit Circuit3; 
+	Circuit Circuit4;
+	block ESS 
+		Real in1, in2, in3, in4; 
+		Real TotalOutput;
+		SwitchGear SG;
+		VoltageConverter VC; 
+		assertion 
+			SG.in1:=in1; 
+			SG.in2:=in2;
+			SG.in3:=in3; 
+			SG.in4:=in4;  
+			VC.in:=SG.Output; 
+			VC.ConvertedOutput:=VC.in;
+	end 
+	assertion 
+    	ESS.in1:=Circuit1.MC1.out; 
+    	ESS.in2:=Circuit2.MC1.out; 
+    	ESS.in3:=Circuit3.MC1.out; 
+    	ESS.in4:=Circuit4.MC1.out;   
+    	ESS.TotalOutput:=ESS.VC.ConvertedOutput;
+    observer Real FARMenergy = ESS.TotalOutput; 
+end 
+
+
+
+
+/*block Circuit1
+        Windmill WM1;  
+        Windmill WM2; 
+        Windmill WM3; 
+        Windmill WM4; 
+        Windmill WM5;
+        Real EnergyOutput; 
+        assertion 
+            WM1.WindSpeed:=main.W.WindSpeed; 
+            WM2.WindSpeed:=main.W.WindSpeed; 
+            WM3.WindSpeed:=main.W.WindSpeed; 
+            WM4.WindSpeed:=main.W.WindSpeed;
+            WM5.WindSpeed:=main.W.WindSpeed;   
+            EnergyOutput:= WM1.EnergyOutput + WM2.EnergyOutput + WM3.EnergyOutput + WM4.EnergyOutput + WM5.EnergyOutput;  
+    end 
+
+
+	clones Circuit1 as Circuit2; 
+    clones Circuit1 as Circuit3; 
+    clones Circuit1 as Circuit4;
+
+*/
