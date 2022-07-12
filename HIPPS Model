@@ -1,0 +1,61 @@
+class PressureTransmitter
+	parameter alpha = 2.0e4; 
+	parameter beta = 3; 
+	state failed = Weibull(alpha, beta, 0); 
+	flow in = false;
+	flow out = in and not failed;
+end
+
+class ShutDownValve
+	parameter MTTF = 2.0e4;
+	state failed = exponential(1/MTTF); 
+	flow in = false;
+	flow out = in and not failed;	
+end 
+
+class Actuator
+	parameter MTTF = 1.0e5;
+	state failed = exponential(1/MTTF); 
+	flow in = false;
+	flow out = in and not failed;	
+end 
+
+class SolenoidValve
+	parameter MTTF = 2.0e4;
+	state failed = exponential(1/MTTF);
+	flow in = false;
+	flow out = in and not failed;
+end
+
+class LogicSolver
+	parameter alpha = 8.0e4; 
+	parameter beta = 3;
+	state failed = Weibull(alpha, beta, 0);
+	flow in = false;
+	flow out = in and not failed;
+end
+
+block HIPPS
+	PressureTransmitter PT1;
+	PressureTransmitter PT2;
+	PressureTransmitter PT3;
+	LogicSolver LS; 
+	flow LS.in = PT1.out or PT2.out or PT3.out;   
+	block FE1
+		ShutDownValve SDV;
+		SolenoidValve SV;
+		Actuator A;  
+	end 
+	clones FE1 as FE2; 
+	flow FE1.SV.in = LS.out;
+	flow FE1.A.in= FE1.SV.out;
+	flow FE1.SDV.in = FE1.A.out; 
+	flow FE2.SV.in = LS.out;
+	flow FE2.A.in= FE2.SV.out;
+	flow FE2.SDV.in = FE2.A.out;
+	
+	flow PT1.in = true;
+	flow PT2.in = true;
+	flow PT3.in = true;
+	flow HIPPSfailure = not FE1.SDV.out and not FE2.SDV.out or not atleast 2(PT1.out, PT2.out, PT3.out) or not LS.out; 
+end 	
