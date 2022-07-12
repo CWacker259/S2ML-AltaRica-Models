@@ -1,0 +1,179 @@
+/* 
+*Gas Compression Station 
+*/ 
+
+domain UnitState1{ WORKING, DEGRADED, FAILED} 
+
+class Motor 
+	UnitState1 _state(init = WORKING);   
+	Boolean InFlow (reset = false); 
+	Boolean OutFlow (reset = false); 
+	parameter Real delta = 8.65e-4; //degredation value
+	parameter Real lambda = 1.65e-3; //failure value
+	event degradation (delay = exponential(delta));   
+	event failure (delay = exponential(lambda)); 
+	event deg_repair (delay = Dirac(8)); //time of 8 hours
+	event fail_repair (delay = Dirac(24)); //time of 24 hours or 3 days
+	transition 
+		degradation: _state==WORKING -> _state := DEGRADED; 
+		failure: _state==DEGRADED -> _state := FAILED; 
+		deg_repair: _state==DEGRADED -> _state := WORKING;  
+		fail_repair: _state==FAILED -> _state := WORKING;
+	assertion 
+		OutFlow := if _state==WORKING or _state==DEGRADED then InFlow else false; 
+end 
+
+class Compressor 
+	UnitState1 _state(init = WORKING);   
+	Boolean Line (reset=false); 
+	Real OutFlow (reset=0.0); 
+	Real InFlow (reset=0.0);
+	parameter Real delta = 7.84e-4; //degredation value
+	parameter Real lambda = 2.40e-3; //failure value
+	event degradation (delay = exponential(delta));   
+	event failure (delay = exponential(lambda)); 
+	event deg_repair (delay = Dirac(8)); //time of 8 hours (1 day)
+	event fail_repair (delay = Dirac(40)); //time of 40 hours or 5 days
+	transition 
+		degradation: _state==WORKING -> _state := DEGRADED; 
+		failure: _state==DEGRADED -> _state := FAILED; 
+		deg_repair: _state==DEGRADED -> _state := WORKING;  
+		fail_repair: _state==FAILED -> _state := WORKING; 
+end 
+
+
+domain UnitState2 {WORKING, FAILED}
+
+class VariableSpeedDrive 
+	UnitState2 _state(init = WORKING);  
+	Boolean OutFlow (reset=true); 
+	parameter Real MTTR = 160; 
+	parameter Real lambda = 4.35e-7; 
+	event failure (delay = exponential(lambda));
+	event repair (delay = exponential(1/MTTR));  
+	transition 
+	failure: _state==WORKING -> _state:=FAILED; 
+	repair: _state==FAILED -> _state:=WORKING; 
+	assertion 
+		OutFlow := if _state==WORKING then true else false;   	
+end
+
+class GearBox 
+    UnitState2 _state(init = WORKING);  
+	Boolean InFlow (reset=false);  
+	Boolean OutFlow (reset=false);
+	parameter Real MTTR = 240; 
+	parameter Real lambda = 1.24e-7; 
+	event failure (delay = exponential(lambda));
+	event repair (delay = exponential(1/MTTR));  
+	transition 
+	failure: _state==WORKING -> _state:=FAILED; 
+	repair: _state==FAILED -> _state:=WORKING; 
+	assertion 
+		OutFlow := if _state==WORKING then InFlow else false; 
+end	
+
+domain MonthlyDemand {JAN, FEB, MAR, APR, MAY, JUN, JUL, AUG, SEP, OCT, NOV, DEC}
+
+class Station   
+	MonthlyDemand month(init = JAN); 
+	Real demand (reset=0.0);  
+	Real perfectProduction (reset=0.0); 
+	event changeMonth (delay = Dirac(240)); /*240 hours in 1 month*/
+	transition 
+		changeMonth: month==JAN -> month:=FEB;
+		changeMonth: month==FEB -> month:=MAR; 
+		changeMonth: month==MAR -> month:=APR; 
+		changeMonth: month==APR -> month:=MAY; 
+		changeMonth: month==MAY -> month:=JUN; 
+		changeMonth: month==JUN -> month:=JUL; 
+		changeMonth: month==JUL -> month:=AUG; 
+		changeMonth: month==AUG -> month:=SEP; 
+		changeMonth: month==SEP -> month:=OCT; 
+		changeMonth: month==OCT -> month:=NOV; 
+		changeMonth: month==NOV -> month:=DEC;  
+		changeMonth: month==DEC -> month:=JAN; 
+    assertion
+		demand := if month==JAN or month==FEB then 80 				 
+			 else if month==MAR then 70 
+			 else if month==APR or month==OCT then 60 
+			 else if month==MAY or month==SEP then 50 
+			 else if month==JUN or month==JUL or month==AUG then 40 
+			 else if month==NOV then 65 
+			 else 75; /*demand for each given month*/ 
+		perfectProduction := if month==JAN or month==FEB then 80 				 
+			 else if month==MAR then 70 
+			 else if month==APR or month==OCT then 60 
+			 else if month==MAY or month==SEP then 50 
+			 else if month==JUN or month==JUL or month==AUG then 40 
+			 else if month==NOV then 65 
+			 else 75; 
+end 
+
+class PressureTank 
+	Real storage (reset=0.0); 
+end
+
+block System 
+	Station S;
+	PressureTank PT; 
+	Real consumption(reset=0);  
+	parameter Real optimal = 80;
+	Boolean PrevMaintanence_B1 (reset=false);  
+	Boolean PrevMaintanence_B2 (reset=false);
+	Boolean PrevMaintanence_B3 (reset=false); 
+	Boolean PrevMaintanence_B4 (reset=false);
+	block B1  
+		parameter Real optimal = 80;  
+		Motor M; 
+		Compressor CMP; 
+		GearBox GB; 
+		VariableSpeedDrive VSD;  
+		parameter Real MDeg = 60; 
+		parameter Real CMPDeg = 80; 
+		parameter Real minDem = 50; 
+		Real demand (reset=0);
+		assertion 
+		    M.InFlow := VSD.OutFlow; 
+			GB.InFlow := M.OutFlow; 
+			CMP.Line := GB.OutFlow; 
+			CMP.InFlow := demand;
+			CMP.OutFlow := if CMP.InFlow < minDem then 0.0
+					  else if CMP.Line and M._state==WORKING and CMP._state==WORKING then CMP.InFlow 
+				      else if CMP.Line and M._state==WORKING and CMP._state==DEGRADED and CMP.InFlow >= CMPDeg then CMPDeg 
+				      else if CMP.Line and M._state==DEGRADED and CMP.InFlow >= MDeg then MDeg  
+					  else if CMP.Line and M._state==WORKING and CMP._state==DEGRADED and CMP.InFlow < CMPDeg then CMP.InFlow 
+				      else if CMP.Line and M._state==DEGRADED and CMP.InFlow < MDeg then CMP.InFlow  
+					  else 0;	 
+		observer Boolean CorrectiveMaintanence = not (VSD._state==WORKING and M._state==WORKING and GB._state==WORKING and CMP._state==WORKING); 
+		/*perform corrective maintanence Monte-Carlo simulation where value==true and value-type='had value'*/
+	end  
+	clones B1 as B2; 
+	clones B1 as B3; 
+	clones B1 as B4; 
+	assertion 
+		PrevMaintanence_B1 := if S.month==MAR or S.month==OCT then true else false; 
+		PrevMaintanence_B2 := if S.month==MAR or S.month==OCT then true else false; 
+		PrevMaintanence_B3 := if S.month==APR or S.month==NOV then true else false; 
+		PrevMaintanence_B4 := if S.month==APR or S.month==NOV then true else false; 
+		B1.demand := S.demand;
+		B2.demand := S.demand;
+		B3.demand := S.demand;
+		B4.demand := S.demand;  
+		PT.storage := (B1.CMP.OutFlow + B2.CMP.OutFlow + B3.CMP.OutFlow + B4.CMP.OutFlow) / 4; 
+		consumption := if S.demand < 50 then 0 
+				  else if PT.storage >= optimal then 100 + 0.1*(80 - PT.storage) 
+				  else if PT.storage <= optimal then 100 - 0.1*(PT.storage - 80)  
+				  else 100;  
+	observer Real StationProduction = PT.storage; //expected production
+ 	observer Real LossOfProduction = S.perfectProduction - PT.storage; //expected loss of production
+	observer Real EnergyConsumption = consumption; //expected energy consumption   
+	observer Real PerfectProduction = S.perfectProduction;
+              						//expected number of corrective maintenances over a 10 years period within each block
+end 
+
+/* 
+*NOTE 1 month == 240 hours 
+*NOTE 1 year == 2880 hours 
+*NOTE 10 years == 28800 hours
+*/
