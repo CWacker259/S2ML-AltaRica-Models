@@ -1,5 +1,0 @@
-<!DOCTYPE AltaRicaWizard>
-<project name="PumpingSystem">
-    <file name="Model.sbe" path="Model.sbe"/>
-    <file name="script.xfta" path="script.xfta"/>
-</project>
